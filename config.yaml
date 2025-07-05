@@ -1,0 +1,111 @@
+# CatBond 모델 설정 파일
+
+# 데이터 설정
+data:
+  data_dir: "./data/processed/"
+  rain_file: "rain_nation_daily_glm.parquet"
+  loss_file: "merged_flood_data.csv"
+  features_file: "features.parquet"
+  climate_file: "climate_idx.csv"
+
+# 모델 설정
+model:
+  face_value: 100000000000 # 1,000억원 (액면가)
+  cover_limit: 3000000000000 # 3조 원 (기존 호환성용)
+  quantile_level: 0.999918 # 99.9918% 분위수 (연 0.03건 확률)
+  p_annual: 0.000082 # 연간 0.03건 확률
+  chungju_weight: 3.0 # 충주 지역 가중치
+  major_city_weight: 1.5 # 대도시 가중치
+
+# 빈도 모델 설정
+frequency:
+  alpha: 0.01
+  max_iter: 1000
+  fit_intercept: true
+  exposure_growth_rate: 0.02
+
+# 트리거 모델 설정
+trigger:
+  learning_rate: 0.005
+  num_leaves: 15
+  max_depth: 4
+  feature_fraction: 0.6
+  bagging_fraction: 0.6
+  bagging_freq: 5
+  lambda_l2: 1.0
+  lambda_l1: 0.1
+  min_child_samples: 100
+  min_child_weight: 0.5
+  class_weight_max: 10.0
+  early_stopping_rounds: 250
+  num_boost_round: 3000
+
+# 손실 모델 설정
+severity:
+  learning_rate: 0.005
+  num_leaves: 15
+  max_depth: 4
+  feature_fraction: 0.6
+  bagging_fraction: 0.6
+  bagging_freq: 5
+  lambda_l2: 1.0
+  lambda_l1: 0.1
+  min_child_samples: 100
+  min_child_weight: 0.5
+  early_stopping_rounds: 250
+  num_boost_round: 3000
+
+# 피처 설정
+features:
+  climate_features: ["ENSO", "IOD", "PDO"]
+  trigger_features:
+    [
+      "rain_mm",
+      "rain_3d_sum",
+      "rain_7d_sum",
+      "rain_max_last30d",
+      "imperv_area_m2",
+      "risk_index",
+      "pop_density_km2",
+      "grdp",
+      "sewer_length_m",
+      "gov_spend",
+      "month_sin",
+      "month_cos",
+    ]
+  severity_features:
+    [
+      "rain_mm",
+      "rain_3d_sum",
+      "rain_7d_sum",
+      "rain_max_last30d",
+      "imperv_area_m2",
+      "risk_index",
+      "pop_density_km2",
+      "grdp",
+      "sewer_length_m",
+      "gov_spend",
+      "month_sin",
+      "month_cos",
+    ]
+
+# 학습 설정
+training:
+  test_size: 0.2
+  random_state: 42
+  n_splits: 1
+  recall_threshold: 0.5
+  outlier_quantile: 0.999
+
+# Expected Loss 설정
+expected_loss:
+  years: 3 # 만기 (n)
+  face_value: 100000000000 # 액면가 (F) - 1,000억원
+  loading_factor: 0.05 # 로딩 팩터
+
+# 모델 저장 설정
+output:
+  frequency_model: "poisson_glm_freq_national.pkl"
+  trigger_model: "trigger_probability_model.pkl"
+  severity_model: "conditional_severity_model.txt"
+  region_info: "region_info_mtl.pkl"
