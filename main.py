@@ -18,7 +18,7 @@ def main():
     required_files = [
         "rain_nation_daily_glm.parquet",
         "features.parquet", 
-        "merged_flood_data.csv",
+        "merged_flood_data_updated.csv",
         "climate_idx.csv"
     ]
     

@@ -11,18 +11,47 @@ from functools import wraps
 from typing import Any, Dict, List, Optional
 import yaml
 import os
+import streamlit as st
 
-def setup_logging(level: str = "INFO") -> logging.Logger:
+def setup_logging(log_level: str = "INFO") -> logging.Logger:
     """로깅 설정"""
     logging.basicConfig(
-        level=getattr(logging, level),
+        level=getattr(logging, log_level),
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[
             logging.StreamHandler(),
-            logging.FileHandler('catbond.log')
+            logging.FileHandler('logs/catbond.log', encoding='utf-8')
         ]
     )
     return logging.getLogger(__name__)
+
+def streamlit_logger():
+    """Streamlit용 로거 반환"""
+    return logging.getLogger(__name__)
+
+def st_log_info(message: str):
+    """Streamlit에서 정보 로그 출력"""
+    st.write(f"ℹ️ {message}")
+
+def st_log_success(message: str):
+    """Streamlit에서 성공 로그 출력"""
+    st.success(f"✅ {message}")
+
+def st_log_warning(message: str):
+    """Streamlit에서 경고 로그 출력"""
+    st.warning(f"⚠️ {message}")
+
+def st_log_error(message: str):
+    """Streamlit에서 오류 로그 출력"""
+    st.error(f"❌ {message}")
+
+def st_log_progress(message: str, progress_bar=None):
+    """Streamlit에서 진행 상황 로그 출력"""
+    if progress_bar:
+        progress_bar.progress(0.5)
+        progress_bar.text(message)
+    else:
+        st.write(f"🔄 {message}")
 
 def timer(func):
     """함수 실행 시간 측정 데코레이터"""

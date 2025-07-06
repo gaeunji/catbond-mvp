@@ -5,7 +5,11 @@ CatBond 모델 데이터 로딩 및 전처리
 import pandas as pd
 import numpy as np
 from typing import Dict, Tuple, Optional
+import logging
 from .utils import timer, print_data_info, validate_data, find_chungju_region
+
+# 로깅 설정
+logger = logging.getLogger(__name__)
 
 class CatBondDataLoader:
     """CatBond 모델 데이터 로더"""
@@ -67,8 +71,7 @@ class CatBondDataLoader:
     @timer
     def calculate_thresholds(self, df_rain: pd.DataFrame) -> Dict[str, float]:
         """지역별 임계값 계산"""
-        print(f"[INFO] 확률-기준 임계값 계산:")
-        print(f"  • 분위수 레벨 = {self.quantile_level:.3f}")
+        logger.info(f"확률-기준 임계값 계산 - 분위수 레벨: {self.quantile_level:.3f}")
         
         region_thresholds = (
             df_rain
@@ -77,10 +80,10 @@ class CatBondDataLoader:
               .to_dict()
         )
         
-        # 처음 10개만 출력
+        # 처음 10개만 로깅
         for region, threshold in list(region_thresholds.items())[:10]:
-            print(f"  • {region}: {threshold:.1f}mm")
-        print(f"  • ... (총 {len(region_thresholds)}개 지역)")
+            logger.info(f"{region}: {threshold:.1f}mm")
+        logger.info(f"... (총 {len(region_thresholds)}개 지역)")
         
         return region_thresholds
     
@@ -89,7 +92,7 @@ class CatBondDataLoader:
                              region_thresholds: Dict[str, float],
                              clim: pd.DataFrame) -> pd.DataFrame:
         """빈도 모델용 데이터 준비"""
-        print("[INFO] 빈도 모델 데이터 준비...")
+        logger.info("빈도 모델 데이터 준비 시작")
         
         # 지역별 초과 이벤트 계산
         events_by_region = {}
@@ -122,7 +125,7 @@ class CatBondDataLoader:
     def prepare_trigger_data(self, df: pd.DataFrame,
                            region_thresholds: Dict[str, float]) -> pd.DataFrame:
         """트리거 모델용 데이터 준비"""
-        print("[INFO] 트리거 모델 데이터 준비...")
+        logger.info("트리거 모델 데이터 준비 시작")
         
         # 데이터 복사 및 지역 카테고리 변환
         df_full = df.copy()
@@ -155,7 +158,7 @@ class CatBondDataLoader:
     @timer
     def prepare_severity_data(self, df_triggered: pd.DataFrame) -> pd.DataFrame:
         """손실 모델용 데이터 준비"""
-        print("[INFO] 손실 모델 데이터 준비...")
+        logger.info("손실 모델 데이터 준비 시작")
         
         # severity를 손실률로 계산 (daily_loss / face_value)
         df_triggered["severity"] = df_triggered["daily_loss"] / self.face_value
@@ -164,17 +167,14 @@ class CatBondDataLoader:
         positive_loss_count = (df_triggered['daily_loss'] > 0).sum()
         positive_severity_count = (df_triggered['severity'] > 0).sum()
         
-        print(f"[INFO] 손실 데이터 검증:")
-        print(f"  • daily_loss > 0인 사건: {positive_loss_count}개")
-        print(f"  • severity > 0인 사건: {positive_severity_count}개")
-        print(f"  • 액면가 (F): {self.face_value:,.0f} 원 ({self.face_value/1e8:.1f}억원)")
+        logger.info(f"손실 데이터 검증 - daily_loss > 0: {positive_loss_count}개, severity > 0: {positive_severity_count}개")
+        logger.info(f"액면가 (F): {self.face_value:,.0f}원 ({self.face_value/1e8:.1f}억원)")
         
         # 소규모 손실 사례 확인
         small_losses = df_triggered[(df_triggered['daily_loss'] > 0) & (df_triggered['daily_loss'] < 1e9)]  # 10억원 미만
         if len(small_losses) > 0:
-            print(f"  • 소규모 손실 사례 (10억원 미만): {len(small_losses)}개")
-            print(f"  • 최소 손실: {small_losses['daily_loss'].min():,.0f} 원")
-            print(f"  • 최소 severity: {small_losses['severity'].min():.8f}")
+            logger.info(f"소규모 손실 사례 (10억원 미만): {len(small_losses)}개")
+            logger.info(f"최소 손실: {small_losses['daily_loss'].min():,.0f}원, 최소 severity: {small_losses['severity'].min():.8f}")
         
         # 로그 변환
         df_triggered["severity_log"] = np.log1p(df_triggered["severity"])
@@ -194,9 +194,18 @@ class CatBondDataLoader:
                         region_thresholds: Dict[str, float]) -> Tuple[str, float]:
         """충주 지역 정보 반환"""
         chungju_region_name = find_chungju_region(df_rain['region'].unique())
-        chungju_threshold = region_thresholds.get(chungju_region_name, 225.0)
         
-        print(f"[INFO] 충주 지역명: {chungju_region_name}")
-        print(f"[INFO] 충주 임계값: {chungju_threshold:.1f}mm")
+        # 설정 파일에서 충주 임계값 가져오기 (기본값: 205.0)
+        config_threshold = self.config['model'].get('chungju_threshold', 205.0)
+        
+        # 설정 파일의 값이 있으면 강제 적용, 없으면 계산된 값 사용
+        if 'chungju_threshold' in self.config['model']:
+            chungju_threshold = config_threshold
+            logger.info(f"충주 지역명: {chungju_region_name}")
+            logger.info(f"충주 임계값: {chungju_threshold:.1f}mm (설정 파일 강제 적용)")
+        else:
+            chungju_threshold = region_thresholds.get(chungju_region_name, config_threshold)
+            logger.info(f"충주 지역명: {chungju_region_name}")
+            logger.info(f"충주 임계값: {chungju_threshold:.1f}mm (계산된 값)")
         
         return chungju_region_name, chungju_threshold 

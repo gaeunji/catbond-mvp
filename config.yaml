@@ -4,7 +4,7 @@
 data:
   data_dir: "./data/processed/"
   rain_file: "rain_nation_daily_glm.parquet"
-  loss_file: "merged_flood_data.csv"
+  loss_file: "merged_flood_data_updated.csv"
   features_file: "features.parquet"
   climate_file: "climate_idx.csv"
 
@@ -16,6 +16,7 @@ model:
   p_annual: 0.000082 # 연간 0.03건 확률
   chungju_weight: 3.0 # 충주 지역 가중치
   major_city_weight: 1.5 # 대도시 가중치
+  chungju_threshold: 205.0 # 충주시 트리거 임계값 (mm)
 
 # 빈도 모델 설정
 frequency:
@@ -96,6 +97,10 @@ training:
   n_splits: 1
   recall_threshold: 0.5
   outlier_quantile: 0.999
+  # 교차검증 설정
+  cv_folds: 5 # Group K-Fold 분할 수
+  cv_shuffle: true # 교차검증 시 셔플 여부
+  cv_selection_metric: "r2" # 최적 모델 선택 기준 (r2, mae, rmse)
 
 # Expected Loss 설정
 expected_loss:
@@ -105,7 +110,16 @@ expected_loss:
 
 # 모델 저장 설정
 output:
-  frequency_model: "poisson_glm_freq_national.pkl"
-  trigger_model: "trigger_probability_model.pkl"
-  severity_model: "conditional_severity_model.txt"
-  region_info: "region_info_mtl.pkl"
+  # 기본 모델 파일들
+  frequency_model: "models/catbond_frequency_model.pkl"
+  trigger_model: "models/catbond_trigger_model.pkl"
+  severity_model: "models/catbond_severity_model.txt"
+  region_info: "models/catbond_region_info.pkl"
+
+  # 백업 및 버전 관리
+  backup_dir: "models/backup/"
+  version_prefix: "v1.0"
+
+  # 결과 및 로그
+  results_dir: "results/"
+  logs_dir: "logs/"
