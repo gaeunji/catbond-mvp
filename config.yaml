@@ -12,10 +12,10 @@ data:
 model:
   face_value: 100000000000 # 1,000억원 (액면가)
   cover_limit: 3000000000000 # 3조 원 (기존 호환성용)
-  quantile_level: 0.999918 # 99.9918% 분위수 (연 0.03건 확률)
-  p_annual: 0.000082 # 연간 0.03건 확률
-  chungju_weight: 3.0 # 충주 지역 가중치
-  major_city_weight: 1.5 # 대도시 가중치
+  quantile_level: 0.999863 # 99.9863% 분위수 (연 0.05건 확률)
+  p_annual: 0.000137 # 연간 0.05건 확률
+  # chungju_weight: 3.0 # 충주 지역 가중치 (제거됨 - 편향 방지)
+  # major_city_weight: 1.5 # 대도시 가중치 (제거됨 - 편향 방지)
   chungju_threshold: 205.0 # 충주시 트리거 임계값 (mm)
 
 # 빈도 모델 설정
@@ -65,12 +65,6 @@ features:
       "rain_3d_sum",
       "rain_7d_sum",
       "rain_max_last30d",
-      "imperv_area_m2",
-      "risk_index",
-      "pop_density_km2",
-      "grdp",
-      "sewer_length_m",
-      "gov_spend",
       "month_sin",
       "month_cos",
     ]

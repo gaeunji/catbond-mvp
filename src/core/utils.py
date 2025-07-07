@@ -101,7 +101,9 @@ def calculate_region_weights(regions: pd.Series,
                            chungju_region_name: str,
                            chungju_weight: float = 3.0,
                            major_city_weight: float = 1.5) -> Dict[str, float]:
-    """지역별 가중치 계산"""
+    """지역별 가중치 계산 - 더 이상 사용되지 않음 (균등 가중치로 대체)"""
+    # 이 함수는 더 이상 사용되지 않습니다.
+    # 균등 가중치 적용으로 인해 편향이 제거되었습니다.
     major_cities = ['서울', '부산', '대구', '인천', '광주', '대전', '울산']
     
     region_weights = {}
@@ -113,6 +115,11 @@ def calculate_region_weights(regions: pd.Series,
         else:
             region_weights[region] = 1.0
     
+    return region_weights
+
+def calculate_uniform_region_weights(regions: pd.Series) -> Dict[str, float]:
+    """균등 지역 가중치 계산 - 모든 지역에 동일한 가중치 적용"""
+    region_weights = {region: 1.0 for region in regions.unique()}
     return region_weights
 
 def print_data_info(df: pd.DataFrame, name: str = "데이터"):
