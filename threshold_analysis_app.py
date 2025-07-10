@@ -130,6 +130,14 @@ class ThresholdAnalysisApp:
             chungju_region_name = "충청북도 충주시"
             chungju_threshold = 205.0
             
+            # 인제군 정보 추가
+            inje_region_name = "강원도 인제군"
+            inje_threshold = region_thresholds.get(inje_region_name, None)
+            if inje_threshold is None:
+                st.warning(f"⚠️ 인제군 임계값 정보를 찾을 수 없습니다.")
+            else:
+                st.info(f"📊 인제군 임계값: {inje_threshold:.1f}mm")
+            
             data = {
                 'df_rain': df_rain,
                 'df_full': df_full,
@@ -139,6 +147,8 @@ class ThresholdAnalysisApp:
                 'feature_engineer': feature_engineer,
                 'chungju_region_name': chungju_region_name,
                 'chungju_threshold': chungju_threshold,
+                'inje_region_name': inje_region_name,
+                'inje_threshold': inje_threshold,
                 'region_thresholds': region_thresholds,
                 'data_loader': data_loader
             }
@@ -351,7 +361,7 @@ class ThresholdAnalysisApp:
         return result
     
     def calculate_break_even_coupon_rate(self, region_name: str, target_threshold: float) -> Dict:
-        """특정 임계값에서의 Break-Even 쿠폰율 계산 (개선된 버전)"""
+        """특정 임계값에서의 Break-Even 쿠폰율 계산 (Loading Factor 방식)"""
         try:
             # 해당 임계값에서의 기대손실 계산
             loss_result = self.calculate_expected_loss_by_threshold(region_name, [target_threshold])
@@ -365,44 +375,25 @@ class ThresholdAnalysisApp:
             face_value = self.config['model']['face_value']
             years = self.config['expected_loss']['years']
             
-            # 기본 Break-Even 쿠폰율 (기대손실을 보전하는 최소 쿠폰율)
-            break_even_rate = (expected_loss / face_value / years) * 100
-            
             # 무위험 이자율 (2.5%)
             risk_free_rate = 0.025 * 100
             
-            # 개선된 리스크 프리미엄 계산
-            # 1. 기본 리스크 프리미엄 (기대손실 기반)
-            base_risk_premium = max(0, break_even_rate - risk_free_rate)
+            # Loading Factor (α) - 2.0으로 고정
+            alpha = 2.0
             
-            # 2. 임계값 기반 추가 리스크 프리미엄
-            # 낮은 임계값 = 높은 위험 = 높은 리스크 프리미엄
-            # 높은 임계값 = 낮은 위험 = 낮은 리스크 프리미엄
-            threshold_risk_factor = self._calculate_threshold_risk_factor(target_threshold, region_name)
+            # 기대손실률 계산 (연간)
+            expected_loss_rate = (expected_loss / face_value / years) * 100
             
-            # 3. 빈도 기반 리스크 프리미엄
-            # 높은 빈도 = 높은 위험 = 높은 리스크 프리미엄
-            frequency_risk_factor = self._calculate_frequency_risk_factor(lambda_annual)
+            # 새로운 쿠폰율 계산: 무위험 이자율 + α × EL
+            required_coupon_rate = risk_free_rate + (alpha * expected_loss_rate)
             
-            # 4. 손실률 기반 리스크 프리미엄
-            # 높은 손실률 = 높은 위험 = 높은 리스크 프리미엄
-            severity_risk_factor = self._calculate_severity_risk_factor(loss_rate)
+            # 기본 Break-Even 쿠폰율 (기존 방식 - 참고용)
+            break_even_rate = expected_loss_rate
             
-            # 종합 리스크 프리미엄
-            total_risk_premium = (
-                base_risk_premium + 
-                threshold_risk_factor + 
-                frequency_risk_factor + 
-                severity_risk_factor
-            )
+            # 리스크 프리미엄 (새로운 방식)
+            risk_premium = alpha * expected_loss_rate
             
-            # 최소 리스크 프리미엄 보장 (0.5%)
-            total_risk_premium = max(0.5, total_risk_premium)
-            
-            # 실제 필요한 쿠폰율 (무위험 이자율 + 종합 리스크 프리미엄)
-            required_coupon_rate = risk_free_rate + total_risk_premium
-            
-            # 위험 수준 평가 (개선된 기준)
+            # 위험 수준 평가 (Loading Factor 기준)
             if required_coupon_rate <= risk_free_rate + 1:
                 risk_level = "매우 낮음"
                 risk_description = "무위험 이자율 + 최소 리스크 프리미엄"
@@ -425,11 +416,9 @@ class ThresholdAnalysisApp:
                 'lambda_annual': lambda_annual,
                 'loss_rate': loss_rate,
                 'break_even_rate': break_even_rate,
-                'base_risk_premium': base_risk_premium,
-                'threshold_risk_factor': threshold_risk_factor,
-                'frequency_risk_factor': frequency_risk_factor,
-                'severity_risk_factor': severity_risk_factor,
-                'total_risk_premium': total_risk_premium,
+                'alpha': alpha,
+                'expected_loss_rate': expected_loss_rate,
+                'risk_premium': risk_premium,
                 'risk_free_rate': risk_free_rate,
                 'required_coupon_rate': required_coupon_rate,
                 'risk_level': risk_level,
@@ -928,9 +917,9 @@ class ThresholdAnalysisApp:
             
             with col4:
                 st.metric(
-                    "종합 리스크 프리미엄",
-                    f"{result['total_risk_premium']:.2f}%",
-                    help="기본 + 임계값 + 빈도 + 손실률 기반 리스크 프리미엄"
+                    "리스크 프리미엄 (α×EL)",
+                    f"{result['risk_premium']:.2f}%",
+                    help="Loading Factor × 기대손실률"
                 )
             
             # 추가 지표
@@ -947,24 +936,23 @@ class ThresholdAnalysisApp:
                 st.metric(
                     "필요 쿠폰율",
                     f"{result['required_coupon_rate']:.2f}%",
-                    help="무위험 이자율 + 리스크 프리미엄"
+                    help="무위험 이자율 + α × EL"
                 )
             
             with col7:
                 # 위험 수준 표시
-                risk_color = {
-                    "매우 낮음": "green",
-                    "낮음": "lightgreen", 
-                    "보통": "orange",
-                    "높음": "red",
-                    "매우 높음": "darkred"
-                }
-                st.markdown(f"""
-                <div style="text-align: center; padding: 10px; background-color: {risk_color.get(result['risk_level'], 'gray')}; border-radius: 5px; color: white;">
-                    <strong>위험 수준: {result['risk_level']}</strong><br>
-                    <small>{result['risk_description']}</small>
-                </div>
-                """, unsafe_allow_html=True)
+                if result['risk_level'] == "매우 낮음":
+                    st.success(f"위험 수준: {result['risk_level']}")
+                elif result['risk_level'] == "낮음":
+                    st.success(f"위험 수준: {result['risk_level']}")
+                elif result['risk_level'] == "보통":
+                    st.warning(f"위험 수준: {result['risk_level']}")
+                elif result['risk_level'] == "높음":
+                    st.error(f"위험 수준: {result['risk_level']}")
+                else:  # 매우 높음
+                    st.error(f"위험 수준: {result['risk_level']}")
+                
+                st.caption(result['risk_description'])
             
             # 분석 결과 시각화
             st.subheader("📊 Break-Even 분석 결과")
@@ -976,13 +964,10 @@ class ThresholdAnalysisApp:
                 specs=[[{"type": "pie"}, {"type": "bar"}]]
             )
             
-            # 쿠폰율 구성 파이 차트 (개선된 버전)
+            # 쿠폰율 구성 파이 차트 (Loading Factor 방식)
             coupon_components = {
                 '무위험 이자율': result['risk_free_rate'],
-                '기본 리스크 프리미엄': result['base_risk_premium'],
-                '임계값 리스크 팩터': result['threshold_risk_factor'],
-                '빈도 리스크 팩터': result['frequency_risk_factor'],
-                '손실률 리스크 팩터': result['severity_risk_factor']
+                '리스크 프리미엄 (α×EL)': result['risk_premium']
             }
             
             fig_reverse.add_trace(
@@ -1019,63 +1004,64 @@ class ThresholdAnalysisApp:
             st.plotly_chart(fig_reverse, use_container_width=True)
             
             # 리스크 프리미엄 상세 분석
-            st.subheader("🔍 리스크 프리미엄 상세 분석")
+            st.subheader("🔍 Loading Factor 상세 분석")
             
             col1, col2, col3, col4 = st.columns(4)
             
             with col1:
                 st.metric(
-                    "기본 리스크 프리미엄",
-                    f"{result['base_risk_premium']:.2f}%",
-                    help="기대손실 기반 기본 리스크 프리미엄"
+                    "Loading Factor (α)",
+                    f"{result['alpha']:.1f}",
+                    help="리스크 프리미엄 계산을 위한 로딩 팩터"
                 )
             
             with col2:
                 st.metric(
-                    "임계값 리스크 팩터",
-                    f"{result['threshold_risk_factor']:.2f}%",
-                    help="임계값 위치 기반 추가 리스크"
+                    "기대손실률 (EL)",
+                    f"{result['expected_loss_rate']:.4f}%",
+                    help="연간 기대손실률"
                 )
             
             with col3:
                 st.metric(
-                    "빈도 리스크 팩터",
-                    f"{result['frequency_risk_factor']:.2f}%",
-                    help="연간 발생 빈도 기반 리스크"
+                    "리스크 프리미엄 (α×EL)",
+                    f"{result['risk_premium']:.4f}%",
+                    help="Loading Factor × 기대손실률"
                 )
             
             with col4:
                 st.metric(
-                    "손실률 리스크 팩터",
-                    f"{result['severity_risk_factor']:.2f}%",
-                    help="손실 규모 기반 리스크"
+                    "총 쿠폰율",
+                    f"{result['required_coupon_rate']:.2f}%",
+                    help="무위험 이자율 + 리스크 프리미엄"
                 )
             
-            # 리스크 팩터 상세 정보
+            # Loading Factor 상세 정보
             st.info(f"""
-            **리스크 팩터 분석:**
-            - **임계값 위치**: {result['target_threshold']:.0f}mm는 해당 지역 강수 분포의 {self._get_threshold_percentile(result['target_threshold'], region_name):.1f} 백분위에 위치
-            - **연간 빈도**: {result['lambda_annual']:.3f}회/년 (예상 발생 빈도)
-            - **손실률**: {result['loss_rate']:.4f} (조건부 손실률)
+            **Loading Factor 분석:**
+            - **Loading Factor (α)**: {result['alpha']:.1f} (고정값)
+            - **기대손실률 (EL)**: {result['expected_loss_rate']:.4f}% (연간)
+            - **리스크 프리미엄**: {result['risk_premium']:.4f}% (α × EL)
+            - **총 쿠폰율**: {result['required_coupon_rate']:.2f}% (무위험 이자율 + α × EL)
             """)
             
             # 권장사항
-            st.subheader("💡 권험 수준별 권장사항")
+            st.subheader("💡 위험 수준별 권장사항")
             
             if result['risk_level'] == "매우 낮음":
-                st.success(f"✅ {result['risk_description']}")
+                st.success("✅ 매우 안전한 투자입니다.")
                 st.info("**권장사항**: 무위험 이자율만으로도 충분하므로 매우 안전한 투자입니다.")
             elif result['risk_level'] == "낮음":
-                st.success(f"✅ {result['risk_description']}")
+                st.success("✅ 시장에서 수용 가능한 수준입니다.")
                 st.info("**권장사항**: 낮은 리스크 프리미엄으로 시장에서 수용 가능한 수준입니다.")
             elif result['risk_level'] == "보통":
-                st.warning(f"⚠️ {result['risk_description']}")
+                st.warning("⚠️ 적정 수준이지만 검토가 필요합니다.")
                 st.info("**권장사항**: 적정 수준이지만 투자자 관점에서 검토가 필요할 수 있습니다.")
             elif result['risk_level'] == "높음":
-                st.error(f"⚠️ {result['risk_description']}")
+                st.error("⚠️ 높은 리스크 프리미엄이 필요합니다.")
                 st.info("**권장사항**: 높은 리스크 프리미엄이 필요하므로 임계값 조정을 고려해보세요.")
             else:  # 매우 높음
-                st.error(f"❌ {result['risk_description']}")
+                st.error("❌ 매우 높은 리스크 프리미엄이 필요합니다.")
                 st.info("**권장사항**: 매우 높은 리스크 프리미엄이 필요합니다. 임계값을 크게 낮추거나 다른 지역을 고려해보세요.")
             
             # 시나리오 분석
@@ -1091,7 +1077,7 @@ class ThresholdAnalysisApp:
                     scenarios.append({
                         '임계값(mm)': threshold,
                         'Break-Even쿠폰율(%)': scenario_result['break_even_rate'],
-                        '종합리스크프리미엄(%)': scenario_result['total_risk_premium'],
+                        '리스크프리미엄(%)': scenario_result['risk_premium'],
                         '필요쿠폰율(%)': scenario_result['required_coupon_rate'],
                         '위험수준': scenario_result['risk_level'],
                         '기대손실(억원)': scenario_result['expected_loss']/1e8
@@ -1268,7 +1254,7 @@ class ThresholdAnalysisApp:
             else:
                 st.error("❌ 투자자와 발행자 관점에 큰 차이가 있습니다. 상세한 협의가 필요합니다.")
             
-            st.info(f"**권장 협의 포인트:**")
+            st.info("**권장 협의 포인트:**")
             st.info(f"- 임계값 범위: {min(investor_optimal['임계값(mm)'], issuer_optimal['임계값(mm)']):.0f}mm ~ {max(investor_optimal['임계값(mm)'], issuer_optimal['임계값(mm)']):.0f}mm")
             st.info(f"- 쿠폰율 범위: {min(investor_optimal['쿠폰율(%)'], issuer_optimal['쿠폰율(%)']):.1f}% ~ {max(investor_optimal['쿠폰율(%)'], issuer_optimal['쿠폰율(%)']):.1f}%")
         
@@ -1284,35 +1270,15 @@ class ThresholdAnalysisApp:
         
         # 사이드바 설정
         with st.sidebar:
-            # 헤더 섹션
-            st.markdown("""
-            <div style="text-align: center; padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-                        border-radius: 10px; margin-bottom: 20px;">
-                <h2 style="color: white; margin: 0;">🌧️ CatBond</h2>
-                <h3 style="color: white; margin: 5px 0;">임계값 분석</h3>
-                <p style="color: #f0f0f0; margin: 0; font-size: 14px;">역산 분석 모드</p>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            # 분석 모드 표시
-            st.markdown("""
-            <div style="background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%); 
-                        padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #ff6b6b;">
-                <h4 style="margin: 0; color: #2c3e50;">🔄 역산 분석</h4>
-                <p style="margin: 5px 0 0 0; color: #34495e; font-size: 13px;">
-                    임계값 → Break-Even 쿠폰율
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            # 지역 선택 섹션
-            st.markdown("""
-            <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #3498db;">
-                <h4 style="margin: 0; color: #2c3e50;">📍 분석 지역</h4>
-            </div>
-            """, unsafe_allow_html=True)
+            # 간단한 헤더
+            st.title("🌧️ CatBond 분석")
+            st.caption("임계값 → 쿠폰율 역산 분석")
+            st.divider()
             
             available_regions = self.data['df_rain']['region'].unique() if self.data else []
+            
+            # 지역 선택
+            st.subheader("📍 지역 선택")
             
             # 학습된 지역 통계에서 사용 가능한 지역만 필터링
             if self.data and self.data['feature_engineer'].region_stats is not None:
@@ -1329,19 +1295,14 @@ class ThresholdAnalysisApp:
                     default_index = list(available_regions).index(self.data['chungju_region_name'])
                 
                 selected_region = st.selectbox(
-                    "지역 선택",
+                    "분석할 지역을 선택하세요",
                     available_regions,
                     index=default_index,
                     help="모델 학습 시 사용된 지역만 선택 가능합니다."
                 )
                 
                 # 선택된 지역 표시
-                st.markdown(f"""
-                <div style="background: #e8f5e8; padding: 10px; border-radius: 6px; margin-bottom: 15px; border-left: 4px solid #27ae60;">
-                    <p style="margin: 0; color: #2c3e50; font-weight: bold;">✅ 선택된 지역</p>
-                    <p style="margin: 5px 0 0 0; color: #27ae60;">{selected_region}</p>
-                </div>
-                """, unsafe_allow_html=True)
+                st.info(f"✅ 선택된 지역: {selected_region}")
                 
                 # 학습되지 않은 지역 경고
                 if len(available_regions) < len(self.data['df_rain']['region'].unique()):
@@ -1350,63 +1311,45 @@ class ThresholdAnalysisApp:
                 st.error("❌ 지역 통계 정보가 없습니다. 모델을 다시 학습해주세요.")
                 return
             
-            # 임계값 설정 섹션
-            st.markdown("""
-            <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #e74c3c;">
-                <h4 style="margin: 0; color: #2c3e50;">🎯 목표 임계값</h4>
-            </div>
-            """, unsafe_allow_html=True)
+            st.divider()
             
-            # 임계값 슬라이더
+            # 임계값 설정
+            st.subheader("🎯 임계값 설정")
+            
             target_threshold = st.slider(
                 "강수량 임계값 (mm)",
                 min_value=50,
                 max_value=500,
                 value=200,
-                step=10,
-                help="트리거 발생 기준이 되는 강수량 임계값을 설정하세요"
+                step=5,
+                help="트리거 발생 기준이 되는 강수량 임계값을 설정하세요 (5mm 단위)"
             )
             
-            # 임계값 범위 표시
+            # 임계값 수준 표시
             if target_threshold <= 100:
                 threshold_level = "매우 낮음"
-                threshold_color = "#e74c3c"
+                st.error(f"📊 임계값 수준: {threshold_level} ({target_threshold}mm)")
             elif target_threshold <= 200:
                 threshold_level = "낮음"
-                threshold_color = "#f39c12"
+                st.warning(f"📊 임계값 수준: {threshold_level} ({target_threshold}mm)")
             elif target_threshold <= 300:
                 threshold_level = "보통"
-                threshold_color = "#f1c40f"
+                st.info(f"📊 임계값 수준: {threshold_level} ({target_threshold}mm)")
             elif target_threshold <= 400:
                 threshold_level = "높음"
-                threshold_color = "#27ae60"
+                st.success(f"📊 임계값 수준: {threshold_level} ({target_threshold}mm)")
             else:
                 threshold_level = "매우 높음"
-                threshold_color = "#8e44ad"
+                st.success(f"📊 임계값 수준: {threshold_level} ({target_threshold}mm)")
             
-            st.markdown(f"""
-            <div style="background: #f8f9fa; padding: 10px; border-radius: 6px; margin-bottom: 15px; border-left: 4px solid {threshold_color};">
-                <p style="margin: 0; color: #2c3e50; font-weight: bold;">📊 임계값 수준</p>
-                <p style="margin: 5px 0 0 0; color: {threshold_color}; font-weight: bold;">{threshold_level} ({target_threshold}mm)</p>
-            </div>
-            """, unsafe_allow_html=True)
+            st.divider()
             
-            # 기준 정보 섹션
-            st.markdown("""
-            <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #9b59b6;">
-                <h4 style="margin: 0; color: #2c3e50;">💰 기준 정보</h4>
-            </div>
-            """, unsafe_allow_html=True)
+            # 기준 정보
+            st.subheader("💰 기준 정보")
             
             # 무위험 이자율 표시
             risk_free_rate = 0.025  # 2.5%
-            st.markdown(f"""
-            <div style="background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%); 
-                        padding: 12px; border-radius: 6px; margin-bottom: 10px;">
-                <p style="margin: 0; color: #2c3e50; font-weight: bold;">💰 무위험 이자율</p>
-                <p style="margin: 5px 0 0 0; color: #27ae60; font-size: 18px; font-weight: bold;">{risk_free_rate*100:.1f}%</p>
-            </div>
-            """, unsafe_allow_html=True)
+            st.metric("무위험 이자율", f"{risk_free_rate*100:.1f}%")
             
             # 분석 설명
             with st.expander("💡 분석 설명", expanded=False):
@@ -1415,30 +1358,25 @@ class ThresholdAnalysisApp:
                 
                 📈 **Break-Even 쿠폰율**: 기대손실을 보전하는 최소 쿠폰율
                 
-                🎯 **다층 리스크 프리미엄**: 
-                - 기본 리스크 프리미엄
-                - 임계값 기반 리스크 팩터
-                - 빈도 기반 리스크 팩터
-                - 손실률 기반 리스크 팩터
+                🎯 **Loading Factor 방식**: 
+                - 무위험 이자율 + α × EL(Expected Loss)
+                - α(Loading Factor) = 2.0 (고정값)
+                - 간단하고 투명한 리스크 프리미엄 계산
                 
                 ⚠️ **위험 수준 평가**: 임계값별 위험도 및 권장사항
                 
                 📊 **시나리오 비교**: 다양한 임계값에서의 쿠폰율 비교
                 """)
             
-            # 분석 실행 버튼
-            st.markdown("""
-            <div style="margin-top: 30px;">
-            """, unsafe_allow_html=True)
+            st.divider()
             
+            # 분석 실행 버튼
             analyze_button = st.button(
                 "🚀 분석 실행",
                 type="primary",
                 use_container_width=True,
                 help="설정된 임계값으로 역산 분석을 실행합니다"
             )
-            
-            st.markdown("</div>", unsafe_allow_html=True)
         
         # 메인 컨텐츠
         if analyze_button:
@@ -1449,8 +1387,6 @@ class ThresholdAnalysisApp:
             # 진행 상황 표시
             with st.spinner("역산 분석 중..."):
                 self._run_reverse_analysis(selected_region, target_threshold)
-                
-
         
         else:
             # 초기 화면
@@ -1474,7 +1410,7 @@ class ThresholdAnalysisApp:
             # 현재 설정 정보
             if self.data:
                 st.subheader("📊 현재 설정 정보")
-                col1, col2, col3 = st.columns(3)
+                col1, col2, col3, col4 = st.columns(4)
                 
                 with col1:
                     st.metric("분석 지역", self.data['chungju_region_name'])
@@ -1484,6 +1420,12 @@ class ThresholdAnalysisApp:
                 
                 with col3:
                     st.metric("액면가", f"{self.config['model']['face_value']/1e8:.0f}억원")
+                
+                with col4:
+                    if self.data.get('inje_threshold') is not None:
+                        st.metric("인제군 임계값", f"{self.data['inje_threshold']:.1f}mm")
+                    else:
+                        st.metric("인제군 임계값", "N/A")
 
 def main():
     """메인 함수"""

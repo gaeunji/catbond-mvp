@@ -8,7 +8,7 @@ import numpy as np
 from typing import Dict, List, Tuple
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
-from .utils import timer, calculate_region_weights, safe_divide
+from .utils import timer, safe_divide
 
 class FeatureEngineer:
     """CatBond 모델 피처 엔지니어"""
@@ -133,17 +133,14 @@ class FeatureEngineer:
     
     def get_region_weights(self, df_triggered: pd.DataFrame, 
                           chungju_region_name: str) -> pd.Series:
-        """지역별 가중치 계산"""
-        region_weights = calculate_region_weights(
-            df_triggered['region'],
-            chungju_region_name,
-            self.config['model']['chungju_weight'],
-            self.config['model']['major_city_weight']
-        )
+        """지역별 가중치 계산 - 모든 지역에 동일한 가중치 적용"""
+        # 모든 지역에 동일한 가중치 적용 (가중치 편향 제거)
+        region_weights = {region: 1.0 for region in df_triggered['region'].unique()}
         
         sample_weight = df_triggered['region'].map(region_weights)
         
-        print(f"[INFO] 지역별 가중치 적용:")
+        print(f"[INFO] 지역별 가중치 적용 (균등 가중치):")
+        print(f"  • 모든 지역 가중치: 1.0 (편향 제거)")
         print(f"  • 평균 가중치: {sample_weight.mean():.2f}")
         print(f"  • 가중치 범위: {sample_weight.min():.1f} ~ {sample_weight.max():.1f}")
         
