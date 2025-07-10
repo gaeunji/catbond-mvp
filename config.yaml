@@ -41,9 +41,20 @@ trigger:
   early_stopping_rounds: 250
   num_boost_round: 3000
 
-# 손실 모델 설정
+# 손실 모델 설정 (MLP)
 severity:
-  learning_rate: 0.005
+  # MLP 아키텍처 설정
+  hidden_units: [128, 64, 32] # 은닉층 뉴런 수
+  learning_rate: 0.001 # 학습률
+  epochs: 200 # 최대 에포크
+  batch_size: 32 # 배치 크기
+  dropout_rate: 0.3 # 드롭아웃 비율
+  l2_reg: 0.01 # L2 정규화
+  early_stopping_patience: 20 # 조기 종료 인내심
+  classification_threshold: 0.001 # 손실률 분류 임계값 (0.1%) - F1 Score 계산용
+
+  # 기존 LightGBM 설정 (호환성용)
+  learning_rate_lgb: 0.005
   num_leaves: 15
   max_depth: 4
   feature_fraction: 0.6
@@ -107,7 +118,7 @@ output:
   # 기본 모델 파일들
   frequency_model: "models/catbond_frequency_model.pkl"
   trigger_model: "models/catbond_trigger_model.pkl"
-  severity_model: "models/catbond_severity_model.txt"
+  severity_model: "models/catbond_severity_model.h5" # MLP 모델은 .h5 확장자 사용
   region_info: "models/catbond_region_info.pkl"
 
   # 백업 및 버전 관리

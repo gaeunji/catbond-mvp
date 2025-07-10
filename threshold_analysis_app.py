@@ -130,6 +130,14 @@ class ThresholdAnalysisApp:
             chungju_region_name = "충청북도 충주시"
             chungju_threshold = 205.0
             
+            # 인제군 정보 추가
+            inje_region_name = "강원도 인제군"
+            inje_threshold = region_thresholds.get(inje_region_name, None)
+            if inje_threshold is None:
+                st.warning(f"⚠️ 인제군 임계값 정보를 찾을 수 없습니다.")
+            else:
+                st.info(f"📊 인제군 임계값: {inje_threshold:.1f}mm")
+            
             data = {
                 'df_rain': df_rain,
                 'df_full': df_full,
@@ -139,6 +147,8 @@ class ThresholdAnalysisApp:
                 'feature_engineer': feature_engineer,
                 'chungju_region_name': chungju_region_name,
                 'chungju_threshold': chungju_threshold,
+                'inje_region_name': inje_region_name,
+                'inje_threshold': inje_threshold,
                 'region_thresholds': region_thresholds,
                 'data_loader': data_loader
             }
@@ -1400,7 +1410,7 @@ class ThresholdAnalysisApp:
             # 현재 설정 정보
             if self.data:
                 st.subheader("📊 현재 설정 정보")
-                col1, col2, col3 = st.columns(3)
+                col1, col2, col3, col4 = st.columns(4)
                 
                 with col1:
                     st.metric("분석 지역", self.data['chungju_region_name'])
@@ -1410,6 +1420,12 @@ class ThresholdAnalysisApp:
                 
                 with col3:
                     st.metric("액면가", f"{self.config['model']['face_value']/1e8:.0f}억원")
+                
+                with col4:
+                    if self.data.get('inje_threshold') is not None:
+                        st.metric("인제군 임계값", f"{self.data['inje_threshold']:.1f}mm")
+                    else:
+                        st.metric("인제군 임계값", "N/A")
 
 def main():
     """메인 함수"""
